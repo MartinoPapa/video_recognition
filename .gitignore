@@ -1,0 +1,15 @@
+# Ignore the dataset directory and all its contents
+dataset/
+
+# Ignore Python cache and compiled files
+__pycache__/
+*.pyc
+
+# Ignore environment folders (common names)
+venv/
+env/
+.env
+
+# Ignore IDE settings (optional but recommended)
+.vscode/
+.idea/
