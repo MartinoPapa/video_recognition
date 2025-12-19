@@ -1,0 +1,23 @@
+Analisi teorica sui migliori parametri:
+- "Long-term Recurrent Convolutional Networks for Visual Recognition and Description" (Donahue et al., 2015)
+- "Beyond Short Snippets: Deep Networks for Video Classification" (Ng et al., 2015)
+- "Human Action Recognition in Videos using a Robust CNN LSTM Approach" (Orozco et al., 2020)
+- "Sequence Classification Using CNN-LSTM Network" (MathWorks/Matlab Documentation Benchmark)
+
+Studio delle LSTM
+
+2d or 3d Convolutional Network:
+- CNN 2d spazio
+- LSTM tempo
+
+magari alzare learning rate
+
+è giusto usare la cross entropy loss?
+- controllare il bilanciamento della classi (512 walk ma solo 100 delle altre). Ha senso dare un peso diverso all loss?
+
+bianco e nero vs colori?
+rgb/3
+
+frame rate
+
+architettura CNN
