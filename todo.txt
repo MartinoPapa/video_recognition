@@ -23,3 +23,5 @@ frame rate
 architettura CNN
 
 VGG16 per la CNN
+
+Loss bilanciata

@@ -1,0 +1,26 @@
+FRAME_SIZE = 244
+FRAME_RATE_SCALER = 2
+REAL_BATCH_SIZE = 1
+ACCUMULATION_STEPS = 10 
+LEARNING_RATE = 1e-3 #magari aumento un po' il learning rate
+EPOCHS = 5
+LSTM_HIDDEN_SIZE = 128 # can try also 256, 128 should handle overfitting better
+LSTM_LAYERS = 1
+REQUIRE_CNN_LINEAR = True
+EMBEDDING_DIM = 256 # to avoid overfitting, can also try 512
+
+my_config = [
+    {'out_channels': 16, 'kernel_size': 3, 'stride': 1, 'padding': 1},
+    {'out_channels': 32, 'kernel_size': 3, 'stride': 1, 'padding': 1},
+    {'out_channels': 64, 'kernel_size': 3, 'stride': 1, 'padding': 1},
+    {'out_channels': 128, 'kernel_size': 3, 'stride': 1, 'padding': 1}
+]
+
+13 epoche a 1e-3
+
+for dataset fall_floor, hit, jump, run
+
+Training set accuracy 80%
+Test 45%
+
+overfitting
