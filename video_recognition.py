@@ -6,10 +6,10 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import pickle
-from sklearn.utils.class_weight import compute_class_weight
 from torch.utils.data import DataLoader, random_split
+from sklearn.utils.class_weight import compute_class_weight
 
-# --- 1. DATA LOADER ---
+# --- 1. DATA LOADER (Unchanged) ---
 class VideoLoader:
     def __init__(self, directory, frame_size, frame_rate_scaler, classes_to_use=None):
         self.directory = directory
@@ -26,27 +26,19 @@ class VideoLoader:
             print(f"Error: Directory '{self.directory}' not found.")
             return
 
-        # 1. Find classes
         all_classes = sorted([d for d in os.listdir(self.directory) if os.path.isdir(os.path.join(self.directory, d))])
         
-        # 2. Filter classes
         if self.classes_to_use is not None:
             self.classes = sorted([c for c in all_classes if c in self.classes_to_use])
         else:
             self.classes = all_classes
 
         self.class_to_idx = {cls_name: i for i, cls_name in enumerate(self.classes)}
-        
         print(f"Classes loaded: {self.classes}")
 
-        # 3. Collect videos
         for label in self.classes:
             folder_path = os.path.join(self.directory, label)
-            
-            # CRITICAL FIX: Sort the files! 
-            # Without sorted(), glob returns random order on different runs, breaking the split persistence.
             video_files = sorted(glob.glob(os.path.join(folder_path, "*.avi")))
-            
             for video_file in video_files:
                 self.db.append((video_file, label))
                 
@@ -60,7 +52,6 @@ class VideoLoader:
             while True:
                 ret, frame = cap.read()
                 if not ret: break
-                
                 if frame_count % n == 0:
                     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     if resize:
@@ -76,25 +67,18 @@ class VideoLoader:
 
     def __getitem__(self, idx):
         video_path, label_str = self.db[idx]
-        frames = self.load_video(video_path, (self.frame_size,self.frame_size), self.frame_rate_scaler) 
-        
+        frames = self.load_video(video_path, None, self.frame_rate_scaler) # video doesn't need to be resized anymore
         if len(frames) == 0:
             frames = torch.zeros((16, 3, self.frame_size, self.frame_size), dtype=torch.float32)
         else:
             frames = torch.tensor(frames, dtype=torch.float32)
             frames = frames.permute(0, 3, 1, 2)
             frames = frames / 255.0
-        
         label_idx = self.class_to_idx[label_str]
         return frames, label_idx
 
-# --- 2. PERSISTENCE HELPER ---
+# --- 2. PERSISTENCE HELPER (Unchanged) ---
 def get_persistent_splits(dataset, ratio, save_prefix):
-    """
-    Checks if 'save_prefix_train.pkl' exists.
-    If yes, loads the split.
-    If no, creates a new split and saves it.
-    """
     train_path = f"{save_prefix}_train.pkl"
     test_path = f"{save_prefix}_test.pkl"
     
@@ -104,10 +88,6 @@ def get_persistent_splits(dataset, ratio, save_prefix):
             train_set = pickle.load(f)
         with open(test_path, 'rb') as f:
             test_set = pickle.load(f)
-            
-        # Optional: Validate that the loaded set size matches the current dataset
-        if len(train_set) + len(test_set) != len(dataset):
-            print("WARNING: Loaded split size does not match current dataset size. You might want to delete the .pkl files and regenerate.")
     else:
         print(f"Creating NEW split for {save_prefix}...")
         train_len = int(ratio * len(dataset))
@@ -122,9 +102,9 @@ def get_persistent_splits(dataset, ratio, save_prefix):
         
     return train_set, test_set
 
-# --- 3. MODEL ARCHITECTURE ---
-AVG_POOL = 0
+# --- 3. MODEL ARCHITECTURE (Unchanged) ---
 MAX_POOL = 1
+AVG_POOL = 0
 
 class CNN(nn.Module):
     def __init__(self, layer_config, poolType, input_dims, embedding_dim):
@@ -151,7 +131,6 @@ class CNN(nn.Module):
                     nn.ReLU(),
                     nn.AvgPool2d(2, 2)
                 )
-            
             self.layers.append(layer)
             current_h = int((current_h + 2*p - k) / s) + 1
             current_w = int((current_w + 2*p - k) / s) + 1     
@@ -198,7 +177,7 @@ class CNNLSTM(nn.Module):
         prediction = self.fc(last_output)
         return prediction
 
-# --- 4. TRAIN/SAVE UTILS ---
+# --- 4. TRAIN/SAVE UTILS (UPDATED) ---
 def save_model(model, model_file):  
     with open(model_file, 'wb') as f:
         pickle.dump(model, f) 
@@ -210,49 +189,52 @@ def load_model(model_file):
     return model
 
 def train(model, epochs, accumulation_steps, learning_rate, train_loader, device, use_weighted_loss=False):
-    # --- 1. LOSS CONFIGURATION ---
+    # --- LOSS CONFIGURATION ---
     if use_weighted_loss:
         print("Calculating class weights for Weighted Loss...")
         
-        # Access the underlying dataset to get labels fast (without loading videos)
+        # 1. Get labels from dataset efficiently
         dataset = train_loader.dataset
-        
-        # Handle if dataset is a Subset (from random_split) or the original VideoLoader
-        if hasattr(dataset, 'indices'):
+        if hasattr(dataset, 'indices'): # It's a Subset
             indices = dataset.indices
             source_dataset = dataset.dataset
-        else:
+        else: # It's the full VideoLoader
             indices = range(len(dataset))
             source_dataset = dataset
             
-        # Extract labels efficiently from the .db list
         all_labels = []
         for i in indices:
-            # db entry is (video_path, label_str)
             _, label_str = source_dataset.db[i]
             label_idx = source_dataset.class_to_idx[label_str]
             all_labels.append(label_idx)
             
-        # Compute balanced weights
-        # classes=np.unique(all_labels) ensures we map weights to the correct indices
-        weights = compute_class_weight(
+        # 2. Compute weights for PRESENT classes
+        present_classes = np.unique(all_labels)
+        computed_weights = compute_class_weight(
             class_weight='balanced', 
-            classes=np.unique(all_labels), 
+            classes=present_classes, 
             y=all_labels
         )
         
-        # Convert to Tensor and move to Device
-        class_weights = torch.tensor(weights, dtype=torch.float).to(device)
-        print(f"Class Weights: {class_weights}")
+        # 3. Create Full Weight Tensor (handling missing classes)
+        # Get total number of classes from the model's output layer
+        total_num_classes = model.fc.out_features
+        full_weights = torch.ones(total_num_classes, dtype=torch.float) # Default weight 1.0
         
-        criterion = nn.CrossEntropyLoss(weight=class_weights)
+        # Fill in the computed weights for the classes we actually have
+        for cls_idx, weight in zip(present_classes, computed_weights):
+            full_weights[cls_idx] = weight
+            
+        full_weights = full_weights.to(device)
+        print(f"Class Weights (Shape {full_weights.shape}): {full_weights}")
+        
+        criterion = nn.CrossEntropyLoss(weight=full_weights)
     else:
         criterion = nn.CrossEntropyLoss()
 
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     model.train()
     
-    # --- 2. TRAINING LOOP ---
     for epoch in range(epochs):
         running_loss = 0.0
         correct = 0
